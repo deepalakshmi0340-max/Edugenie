@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#6558e8">
+  <title>EduGenie — Your AI Learning Companion</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="/"><span class="brand-icon">✦</span> EduGenie</a><span class="top-note">Your personal AI learning companion</span><span class="status"><i></i> Ready to learn</span></header>
+  <main class="layout">
+    <section class="hero"><div class="eyebrow">LEARN SMARTER, EVERY DAY</div><h1>Curiosity starts here<span>.</span></h1><p>Ask questions, simplify tough concepts, and build your next learning path — all in one place.</p>
+      <div class="feature-row"><span>✧ AI tutor</span><span>▤ Smart summaries</span><span>◎ Practice quizzes</span></div>
+    </section>
+    <section class="workspace">
+      <div class="panel input-panel"><div class="panel-heading"><div><span class="step">01</span><h2>What would you like to learn?</h2></div><span class="sparkle">✦</span></div>
+        <label for="task">Choose a learning tool</label>
+        <select id="task"><option value="qa">Ask a question</option><option value="explain">Explain a concept</option><option value="quiz">Generate a quiz</option><option value="summarize">Summarize text</option><option value="learn">Learning path</option></select>
+        <div id="level-wrap" class="level-wrap"><label for="level">Your current level</label><select id="level"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select></div>
+        <label for="prompt" id="prompt-label">Your question</label><textarea id="prompt" rows="7" placeholder="For example: Why is the sky blue?"></textarea>
+        <div class="input-foot"><span id="char-count">0 / 30,000</span><span>Tip: be specific for better results</span></div>
+        <button id="submit" class="primary-btn"><span id="button-text">Get an answer</span><span aria-hidden="true">↗</span></button>
+        <div id="error" class="error" role="alert" hidden></div>
+      </div>
+      <div class="panel result-panel"><div class="panel-heading"><div><span class="step">02</span><h2>Your learning result</h2></div><button id="copy" class="copy-btn" disabled>Copy result</button></div>
+        <div id="empty" class="empty-state"><div class="empty-icon">✧</div><h3>Your next “aha!” moment awaits</h3><p>Choose a tool, enter a topic, and your result will appear here.</p><div class="suggestions"><button data-example="Explain photosynthesis with a simple example.">Explain photosynthesis</button><button data-example="What is the Pythagorean theorem? Give an example.">Pythagorean theorem</button><button data-example="Create a learning path for SQL.">Learn SQL</button></div></div>
+        <div id="loading" class="loading" hidden><span class="spinner"></span><div><strong>Thinking it through…</strong><p>EduGenie is preparing your learning response.</p></div></div>
+        <div id="result" class="result-content" hidden></div>
+      </div>
+    </section>
+    <footer>Made for curious minds <span>•</span> EduGenie AI <span>•</span> Verify important facts with trusted sources.</footer>
+  </main>
+  <script>
+    const task = document.querySelector('#task'), promptBox = document.querySelector('#prompt'), level = document.querySelector('#level');
+    const label = document.querySelector('#prompt-label'), levelWrap = document.querySelector('#level-wrap'), submit = document.querySelector('#submit');
+    const buttonText = document.querySelector('#button-text'), result = document.querySelector('#result'), empty = document.querySelector('#empty'), loading = document.querySelector('#loading'), error = document.querySelector('#error'), copy = document.querySelector('#copy');
+    const config = {
+      qa: {endpoint:'/qa', label:'Your question', placeholder:'For example: Why is the sky blue?', button:'Get an answer', level:false},
+      explain: {endpoint:'/explain', label:'Topic to explain', placeholder:'For example: Explain photosynthesis with a simple example.', button:'Explain this concept', level:true},
+      quiz: {endpoint:'/quiz', label:'Topic or passage for the quiz', placeholder:'Paste your notes or enter a topic, such as the Pythagorean theorem.', button:'Generate my quiz', level:false},
+      summarize: {endpoint:'/summarize', label:'Text to summarize', placeholder:'Paste the educational passage you want summarized…', button:'Summarize text', level:false},
+      learn: {endpoint:'/learn/recommendations', label:'What do you want to learn?', placeholder:'For example: SQL, web development, or machine learning.', button:'Build my learning path', level:true}
+    };
+    task.addEventListener('change', updateTask);
+    function updateTask(){const c=config[task.value]; label.textContent=c.label; promptBox.placeholder=c.placeholder; buttonText.textContent=c.button; levelWrap.hidden=!c.level; promptBox.rows=task.value==='summarize'||task.value==='quiz'?9:6;}
+    promptBox.addEventListener('input',()=>document.querySelector('#char-count').textContent=`${promptBox.value.length.toLocaleString()} / 30,000`);
+    document.querySelectorAll('[data-example]').forEach(b=>b.addEventListener('click',()=>{const t=b.dataset.example; if(t.startsWith('Create a learning path'))task.value='learn'; else if(t.startsWith('Explain'))task.value='explain'; else task.value='qa'; updateTask(); promptBox.value=t; promptBox.dispatchEvent(new Event('input')); promptBox.focus();}));
+    submit.addEventListener('click', runTask);
+    promptBox.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')runTask();});
+    async function runTask(){const value=promptBox.value.trim(); if(!value){showError('Please enter a question, topic, or passage first.');promptBox.focus();return;} if(value.length>30000){showError('Please keep your input under 30,000 characters.');return;}
+      const selected=task.value,c=config[selected]; const payload=selected==='qa'?{question:value}:{text:value,level:level.value};
+      error.hidden=true; result.hidden=true; empty.hidden=true; loading.hidden=false; submit.disabled=true; copy.disabled=true;
+      try{const response=await fetch(c.endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); const data=await response.json(); if(!response.ok)throw new Error(data.detail||'Request failed. Please try again.'); renderResult(data.result,selected);}
+      catch(e){showError(e.message||'Could not connect to EduGenie. Check that the backend is running.');empty.hidden=false;}
+      finally{loading.hidden=true;submit.disabled=false;}
+    }
+    function renderResult(data,selected){result.replaceChildren(); if(selected==='quiz'&&Array.isArray(data)){data.forEach((q,i)=>{const card=document.createElement('section');card.className='quiz-question';const h=document.createElement('h3');h.textContent=`${i+1}. ${q.question}`;card.append(h);const options=document.createElement('div');options.className='quiz-options';q.options.forEach(option=>{const btn=document.createElement('button');btn.className='quiz-option';btn.textContent=option;btn.addEventListener('click',()=>{options.querySelectorAll('button').forEach(x=>x.disabled=true);if(option===q.answer){btn.classList.add('correct');feedback.textContent='Correct! '+(q.explanation||'Well done.');feedback.className='feedback good';}else{btn.classList.add('incorrect');options.querySelectorAll('button').forEach(x=>{if(x.textContent===q.answer)x.classList.add('correct');});feedback.textContent='Not quite. Correct answer: '+q.answer+(q.explanation?' — '+q.explanation:'');feedback.className='feedback bad';}});options.append(btn);});const feedback=document.createElement('p');feedback.className='feedback';card.append(options,feedback);result.append(card);});}
+      else {const text=typeof data==='string'?data:JSON.stringify(data,null,2); text.split('\n').forEach(line=>{const p=document.createElement('p');p.textContent=line||' ';result.append(p);});}
+      result.hidden=false;copy.disabled=false;copy.onclick=()=>navigator.clipboard.writeText(result.innerText).then(()=>{copy.textContent='Copied!';setTimeout(()=>copy.textContent='Copy result',1400);}).catch(()=>showError('Clipboard access was blocked by your browser. Select and copy the result manually.'));
+    }
+    function showError(message){error.textContent=message;error.hidden=false;}
+    updateTask();
+  </script>
+</body></html>
